@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "jest"],
+    "noEmit": true
+  },
+  "include": [
+    "server/__tests__/**/*",
+    "client/src/**/*.test.tsx",
+    "shared/**/*"
+  ],
+  "exclude": ["node_modules"]
+}
