@@ -25,6 +25,10 @@ class Database:
         (self.data_dir / "bids").mkdir(exist_ok=True)
         (self.data_dir / "conflicts").mkdir(exist_ok=True)
         (self.data_dir / "predictions").mkdir(exist_ok=True)
+        (self.data_dir / "companies").mkdir(exist_ok=True)
+        (self.data_dir / "users").mkdir(exist_ok=True)
+        (self.data_dir / "uploads").mkdir(exist_ok=True)
+        (self.data_dir / "uploads" / "logos").mkdir(exist_ok=True)
 
     # Project Management
     def create_project(self, project_data: Dict) -> str:
@@ -263,6 +267,143 @@ class Database:
             'win_rate': round(win_rate, 1),
             'total_projects': len(projects)
         }
+
+    # Company Management
+    def create_company(self, company_data: Dict) -> str:
+        """Create a new company with brand settings"""
+        company_id = f"COMP-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        company_data['id'] = company_id
+        company_data['created_at'] = datetime.now().isoformat()
+        company_data['updated_at'] = datetime.now().isoformat()
+        company_data['onboarding_completed'] = company_data.get('onboarding_completed', False)
+
+        file_path = self.data_dir / "companies" / f"{company_id}.json"
+        with open(file_path, 'w') as f:
+            json.dump(company_data, f, indent=2)
+
+        return company_id
+
+    def get_company(self, company_id: str) -> Optional[Dict]:
+        """Get company by ID"""
+        file_path = self.data_dir / "companies" / f"{company_id}.json"
+
+        if file_path.exists():
+            with open(file_path, 'r') as f:
+                return json.load(f)
+        return None
+
+    def update_company(self, company_id: str, updates: Dict) -> bool:
+        """Update company data"""
+        company = self.get_company(company_id)
+
+        if company:
+            company.update(updates)
+            company['updated_at'] = datetime.now().isoformat()
+
+            file_path = self.data_dir / "companies" / f"{company_id}.json"
+            with open(file_path, 'w') as f:
+                json.dump(company, f, indent=2)
+            return True
+
+        return False
+
+    def list_companies(self) -> List[Dict]:
+        """List all companies"""
+        companies = []
+        company_dir = self.data_dir / "companies"
+
+        for file_path in company_dir.glob("*.json"):
+            with open(file_path, 'r') as f:
+                companies.append(json.load(f))
+
+        companies.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+        return companies
+
+    # User Management
+    def create_user(self, user_data: Dict) -> str:
+        """Create a new user"""
+        user_id = f"USR-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        user_data['id'] = user_id
+        user_data['created_at'] = datetime.now().isoformat()
+        user_data['updated_at'] = datetime.now().isoformat()
+
+        file_path = self.data_dir / "users" / f"{user_id}.json"
+        with open(file_path, 'w') as f:
+            json.dump(user_data, f, indent=2)
+
+        return user_id
+
+    def get_user(self, user_id: str) -> Optional[Dict]:
+        """Get user by ID"""
+        file_path = self.data_dir / "users" / f"{user_id}.json"
+
+        if file_path.exists():
+            with open(file_path, 'r') as f:
+                return json.load(f)
+        return None
+
+    def get_user_by_email(self, email: str) -> Optional[Dict]:
+        """Get user by email"""
+        user_dir = self.data_dir / "users"
+
+        for file_path in user_dir.glob("*.json"):
+            with open(file_path, 'r') as f:
+                user = json.load(f)
+                if user.get('email') == email:
+                    return user
+        return None
+
+    def update_user(self, user_id: str, updates: Dict) -> bool:
+        """Update user data"""
+        user = self.get_user(user_id)
+
+        if user:
+            user.update(updates)
+            user['updated_at'] = datetime.now().isoformat()
+
+            file_path = self.data_dir / "users" / f"{user_id}.json"
+            with open(file_path, 'w') as f:
+                json.dump(user, f, indent=2)
+            return True
+
+        return False
+
+    def list_users(self, company_id: Optional[str] = None) -> List[Dict]:
+        """List all users, optionally filtered by company"""
+        users = []
+        user_dir = self.data_dir / "users"
+
+        for file_path in user_dir.glob("*.json"):
+            with open(file_path, 'r') as f:
+                user = json.load(f)
+                if company_id is None or user.get('company_id') == company_id:
+                    users.append(user)
+
+        users.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+        return users
+
+    # File Upload Management
+    def save_logo(self, company_id: str, logo_data: bytes, filename: str) -> str:
+        """Save company logo"""
+        ext = filename.split('.')[-1]
+        logo_filename = f"{company_id}.{ext}"
+        logo_path = self.data_dir / "uploads" / "logos" / logo_filename
+
+        with open(logo_path, 'wb') as f:
+            f.write(logo_data)
+
+        return str(logo_path)
+
+    def get_logo_path(self, company_id: str) -> Optional[str]:
+        """Get path to company logo"""
+        logo_dir = self.data_dir / "uploads" / "logos"
+
+        for ext in ['png', 'svg', 'jpg', 'jpeg']:
+            logo_path = logo_dir / f"{company_id}.{ext}"
+            if logo_path.exists():
+                return str(logo_path)
+
+        return None
 
 
 # Global database instance

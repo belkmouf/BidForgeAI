@@ -55,10 +55,34 @@ def check_authentication() -> bool:
 def login_user(email: str, password: str) -> bool:
     """
     Authenticate user credentials
-    In production, this would query the database
+    Checks both database users and demo users
     """
-    # For demo purposes, using hardcoded users
-    # In production, query from database
+    from utils.database import db
+
+    # First, try to find user in database
+    user = db.get_user_by_email(email)
+
+    if user and verify_password(password, user.get('password', '')):
+        st.session_state.authenticated = True
+        st.session_state.user = {
+            'id': user['id'],
+            'name': user['name'],
+            'email': user['email'],
+            'role': user.get('role', 'User'),
+            'company_id': user.get('company_id')
+        }
+        st.session_state.token = create_token(st.session_state.user)
+
+        # Check if company onboarding is completed
+        if user.get('company_id'):
+            company = db.get_company(user['company_id'])
+            if company:
+                st.session_state.company = company
+                st.session_state.onboarding_completed = company.get('onboarding_completed', False)
+
+        return True
+
+    # Fallback to demo users for backward compatibility
     demo_users = {
         'admin@bidforge.ai': {
             'id': '1',
@@ -83,19 +107,45 @@ def login_user(email: str, password: str) -> bool:
         }
     }
 
-    user = demo_users.get(email)
-    if user and verify_password(password, user['password']):
+    demo_user = demo_users.get(email)
+    if demo_user and verify_password(password, demo_user['password']):
         st.session_state.authenticated = True
         st.session_state.user = {
-            'id': user['id'],
-            'name': user['name'],
-            'email': user['email'],
-            'role': user['role']
+            'id': demo_user['id'],
+            'name': demo_user['name'],
+            'email': demo_user['email'],
+            'role': demo_user['role']
         }
         st.session_state.token = create_token(st.session_state.user)
+        st.session_state.onboarding_completed = True  # Demo users skip onboarding
         return True
 
     return False
+
+
+def register_user(name: str, email: str, password: str, role: str = 'Admin') -> Optional[str]:
+    """
+    Register a new user account
+    Returns user_id on success, None on failure
+    """
+    from utils.database import db
+
+    # Check if user already exists
+    existing_user = db.get_user_by_email(email)
+    if existing_user:
+        return None
+
+    # Create user
+    user_data = {
+        'name': name,
+        'email': email,
+        'password': hash_password(password),
+        'role': role,
+        'company_id': None  # Will be set after company onboarding
+    }
+
+    user_id = db.create_user(user_data)
+    return user_id
 
 
 def logout_user():
@@ -103,6 +153,8 @@ def logout_user():
     st.session_state.authenticated = False
     st.session_state.user = None
     st.session_state.token = None
+    st.session_state.company = None
+    st.session_state.onboarding_completed = False
 
 
 def require_permission(permission: str) -> bool:

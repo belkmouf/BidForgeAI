@@ -76,7 +76,13 @@ def render():
                     with st.spinner("Authenticating..."):
                         if login_user(email, password):
                             st.success("✅ Login successful! Redirecting...")
-                            st.rerun()
+
+                            # Check if user needs to complete onboarding
+                            if not st.session_state.get('onboarding_completed', False):
+                                st.info("🎨 Please complete your brand setup to continue")
+                                st.switch_page("pages/brand_onboarding.py")
+                            else:
+                                st.rerun()
                         else:
                             st.error("❌ Invalid email or password")
 
@@ -85,6 +91,17 @@ def render():
                 if login_user('admin@bidforge.ai', 'Admin@123'):
                     st.success("✅ Demo login successful!")
                     st.rerun()
+
+        # Registration prompt
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("""
+            <p style='text-align: center; color: rgba(255,255,255,0.7); font-size: 0.95rem;'>
+                Don't have an account?
+            </p>
+        """, unsafe_allow_html=True)
+
+        if st.button("✨ Create New Account", use_container_width=True, type="secondary"):
+            st.switch_page("pages/register.py")
 
         # Demo credentials info
         st.markdown("""
