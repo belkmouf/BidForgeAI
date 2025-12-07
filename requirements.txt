@@ -1,0 +1,61 @@
+# BidForge AI - Streamlit Application Requirements
+
+# Core Framework
+streamlit==1.40.1
+streamlit-extras==0.4.7
+streamlit-option-menu==0.4.0
+streamlit-javascript==0.1.5
+
+# AI & ML Libraries
+openai==1.57.4
+anthropic==0.40.0
+google-generativeai==0.8.3
+langchain==0.3.14
+langchain-community==0.3.14
+langchain-openai==0.2.14
+langchain-anthropic==0.3.7
+langchain-google-genai==2.0.8
+sentence-transformers==3.3.1
+chromadb==0.5.23
+faiss-cpu==1.9.0.post1
+
+# Database
+psycopg2-binary==2.9.10
+sqlalchemy==2.0.36
+pgvector==0.3.6
+alembic==1.14.0
+
+# Document Processing
+PyPDF2==3.0.1
+pdfplumber==0.11.4
+python-docx==1.1.2
+extract-msg==0.48.8
+openpyxl==3.1.5
+pandas==2.2.3
+pillow==11.0.0
+
+# Authentication & Security
+pyjwt==2.10.1
+bcrypt==4.2.1
+python-dotenv==1.0.1
+cryptography==44.0.0
+
+# Utilities
+requests==2.32.3
+python-dateutil==2.9.0
+pytz==2024.2
+tenacity==9.0.0
+pydantic==2.10.3
+python-multipart==0.0.20
+
+# Data Visualization
+plotly==6.0.0
+altair==5.5.0
+
+# WhatsApp Integration
+requests-toolbelt==1.0.0
+
+# Testing & Development
+pytest==8.3.4
+pytest-asyncio==0.24.0
+python-decouple==3.8
