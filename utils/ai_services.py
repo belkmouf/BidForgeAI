@@ -8,6 +8,8 @@ import openai
 from anthropic import Anthropic
 from google import generativeai as genai
 
+from .rag_service import get_rag_service
+
 
 class AIServiceManager:
     """Manages connections to multiple AI providers"""
@@ -16,6 +18,7 @@ class AIServiceManager:
         self.openai_client = None
         self.anthropic_client = None
         self.gemini_model = None
+        self.rag_service = get_rag_service()
         self.initialize_clients()
 
     def initialize_clients(self):
@@ -41,32 +44,57 @@ class AIServiceManager:
         project_context: str,
         rfp_content: str,
         model: str = "openai",
-        temperature: float = 0.7
+        temperature: float = 0.7,
+        use_rag: bool = True
     ) -> Dict[str, str]:
         """
-        Generate bid proposal using specified AI model
+        Generate bid proposal using specified AI model with RAG context
 
         Args:
             project_context: Context about the project and company
             rfp_content: RFP document content
             model: AI model to use ('openai', 'anthropic', 'gemini')
             temperature: Creativity level (0.0 - 1.0)
+            use_rag: Whether to use RAG for context retrieval
 
         Returns:
             Dict with generated bid content and metadata
         """
 
-        prompt = self._create_bid_prompt(project_context, rfp_content)
+        # Get RAG context if enabled
+        rag_context = None
+        if use_rag:
+            try:
+                rag_context = self.rag_service.get_context_for_bid(
+                    rfp_text=rfp_content,
+                    n_historical_bids=5,
+                    n_rfq_chunks=10
+                )
+            except Exception as e:
+                print(f"RAG context retrieval failed: {e}")
+                rag_context = None
+
+        prompt = self._create_bid_prompt(project_context, rfp_content, rag_context)
 
         try:
             if model == "openai" and self.openai_client:
-                return self._generate_with_openai(prompt, temperature)
+                result = self._generate_with_openai(prompt, temperature)
             elif model == "anthropic" and self.anthropic_client:
-                return self._generate_with_anthropic(prompt, temperature)
+                result = self._generate_with_anthropic(prompt, temperature)
             elif model == "gemini" and self.gemini_model:
-                return self._generate_with_gemini(prompt, temperature)
+                result = self._generate_with_gemini(prompt, temperature)
             else:
                 raise ValueError(f"Model {model} not available or not configured")
+
+            # Add RAG metadata to result
+            if rag_context:
+                result['rag_context'] = {
+                    'historical_bids_count': len(rag_context.get('historical_bids', [])),
+                    'similar_rfqs_count': len(rag_context.get('similar_rfqs', [])),
+                    'total_context_chunks': rag_context.get('total_context_chunks', 0)
+                }
+
+            return result
         except Exception as e:
             return {
                 "content": "",
@@ -161,7 +189,7 @@ class AIServiceManager:
         documents: List[Dict[str, str]]
     ) -> List[Dict]:
         """
-        Detect semantic and numeric conflicts in documents
+        Detect semantic and numeric conflicts in documents using embeddings
 
         Args:
             documents: List of document dicts with 'content' and 'source'
@@ -172,8 +200,38 @@ class AIServiceManager:
 
         conflicts = []
 
-        # Simple conflict detection implementation
-        # In production, this would use embeddings and similarity search
+        # Extract document contents
+        doc_texts = [doc.get('content', '') for doc in documents if doc.get('content')]
+
+        if len(doc_texts) < 2:
+            return conflicts
+
+        try:
+            # Use RAG service for semantic conflict detection
+            semantic_conflicts = self.rag_service.detect_semantic_conflicts(
+                documents=doc_texts,
+                threshold=0.85
+            )
+
+            # Format conflicts with source information
+            for conflict in semantic_conflicts:
+                idx1 = conflict['doc1_index']
+                idx2 = conflict['doc2_index']
+
+                conflicts.append({
+                    'type': 'semantic',
+                    'severity': conflict['severity'],
+                    'source1': documents[idx1].get('source', f'Document {idx1+1}'),
+                    'source2': documents[idx2].get('source', f'Document {idx2+1}'),
+                    'description': f"High semantic similarity detected between documents (similarity: {conflict['similarity_score']:.2%})",
+                    'snippet1': conflict['doc1_preview'],
+                    'snippet2': conflict['doc2_preview'],
+                    'similarity_score': conflict['similarity_score'],
+                    'confidence': int(conflict['similarity_score'] * 100)
+                })
+
+        except Exception as e:
+            print(f"Semantic conflict detection failed: {e}")
 
         return conflicts
 
@@ -222,8 +280,25 @@ class AIServiceManager:
             "success": True
         }
 
-    def _create_bid_prompt(self, project_context: str, rfp_content: str) -> str:
-        """Create prompt for bid generation"""
+    def _create_bid_prompt(self, project_context: str, rfp_content: str, rag_context: Optional[Dict] = None) -> str:
+        """Create prompt for bid generation with optional RAG context"""
+
+        # Build RAG context section
+        rag_section = ""
+        if rag_context and rag_context.get('total_context_chunks', 0) > 0:
+            rag_section = "\n\nRELEVANT HISTORICAL CONTEXT:\n"
+
+            # Add historical bids
+            if rag_context.get('historical_bids'):
+                rag_section += "\nSimilar Winning Bids:\n"
+                for i, bid in enumerate(rag_context['historical_bids'][:3], 1):
+                    rag_section += f"\n{i}. {bid['document'][:500]}...\n"
+
+            # Add similar RFQs
+            if rag_context.get('similar_rfqs'):
+                rag_section += "\nSimilar RFQ/RFP Requirements:\n"
+                for i, rfq in enumerate(rag_context['similar_rfqs'][:3], 1):
+                    rag_section += f"\n{i}. {rfq['document'][:500]}...\n"
 
         return f"""
         You are an expert construction bid proposal writer. Generate a professional, comprehensive bid proposal
@@ -234,6 +309,7 @@ class AIServiceManager:
 
         RFP REQUIREMENTS:
         {rfp_content}
+        {rag_section}
 
         Generate a complete HTML bid proposal document that includes:
         1. Executive Summary
@@ -247,6 +323,7 @@ class AIServiceManager:
 
         Format the output as professional HTML with appropriate styling for printing.
         Use persuasive but professional language appropriate for C-level executives.
+        {f"Use the historical context provided to ensure consistency with past successful bids." if rag_section else ""}
         """
 
     def _generate_with_openai(self, prompt: str, temperature: float) -> Dict:
