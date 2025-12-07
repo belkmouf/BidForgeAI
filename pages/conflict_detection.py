@@ -4,6 +4,8 @@ Conflict Detection - AI-powered detection of contradictory statements in bid doc
 
 import streamlit as st
 from utils.theme import create_section_header
+from utils.ai_services import ai_service
+from utils.rag_service import get_rag_service
 import pandas as pd
 
 
